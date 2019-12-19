@@ -34,7 +34,8 @@ const Create = ({ history }) => {
     //   return;
     // }
 
-    setLoading(true);
+    // setLoading(true);
+    alert("coming soon...");
     // const { tokenName, tokenSymbol, documentHash, documentUri, amount } = data;
     // try {
     //   const docUri = documentUri || "pitico.cash";
