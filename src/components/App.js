@@ -5,8 +5,8 @@ import { Layout, Menu, Icon, Typography, Radio, List, Skeleton } from "antd";
 import Portfolio from "./Portfolio";
 import { ButtonQR } from "badger-components-react";
 import Create from "./Create";
-import Configure from "./Configure";
-import Audit from "./Audit";
+import Send from "./Send";
+import PayDividends from "./PayDividends";
 import NotFound from "./NotFound";
 import "./App.css";
 import { WalletContext } from "../utils/context";
@@ -46,11 +46,11 @@ const App = () => {
       case "0":
         return <Portfolio />;
       case "1":
-        return <Create />;
+        return <Send />;
       case "2":
-        return <Configure />;
+        return <Create />;
       case "3":
-        return <Audit />;
+        return <PayDividends />;
       default:
         return <NotFound />;
     }
@@ -100,87 +100,18 @@ const App = () => {
             >
               <Menu.ItemGroup style={{ marginTop: "0px" }} key="menu" title="MENU">
                 <Menu.Item key="0">
-                  <span>Portfolio</span>
+                  <span>Receive</span>
                 </Menu.Item>
                 <Menu.Item key="1">
-                  <span>Create</span>
+                  <span>Send</span>
                 </Menu.Item>
                 <Menu.Item key="2">
-                  <span>Configure</span>
+                  <span>Create Token</span>
                 </Menu.Item>
                 <Menu.Item key="3">
-                  <span>Audit</span>
+                  <span>Send Dividends</span>
                 </Menu.Item>
               </Menu.ItemGroup>
-
-              {wallet ? (
-                <Menu.ItemGroup key="menu-receive" title="RECEIVE">
-                  <div
-                    style={{
-                      marginLeft: "20px",
-                      paddingTop: "10px"
-                      // display: `${window.innerWidth > 768 ? "none" : null}`
-                    }}
-                  >
-                    <div>
-                      <QRCode
-                        id="borderedQRCode"
-                        address={address === "slpAddress" ? wallet.slpAddress : wallet.cashAddress}
-                      />
-                    </div>
-
-                    <Radio.Group
-                      defaultValue="slpAddress"
-                      // onChange={e => handleChangeAddress(e)}
-                      value={address}
-                      size="small"
-                      buttonStyle="solid"
-                      ref={radio}
-                    >
-                      <Radio.Button
-                        style={{
-                          borderRadius: "19.5px",
-                          height: "40px",
-                          width: "103px"
-                        }}
-                        value="slpAddress"
-                        onClick={e => handleChangeAddress(e)}
-                      >
-                        SLP Tokens
-                      </Radio.Button>
-                      <Radio.Button
-                        style={{
-                          borderRadius: "19.5px",
-                          height: "40px",
-                          width: "103px"
-                        }}
-                        value="cashAddress"
-                        onClick={e => handleChangeAddress(e)}
-                      >
-                        Bitcoin Cash
-                      </Radio.Button>
-                    </Radio.Group>
-                    {/* {!loading ? (
-                  <List
-                    style={{ marginTop: 16 }}
-                    loading={loading}
-                    itemLayout="horizontal"
-                    dataSource={[
-                      {
-                        title: "BCH",
-                        description: balances.balance + balances.unconfirmedBalance || "0"
-                      }
-                    ]}
-                    renderItem={item => (
-                      <List.Item>
-                        <List.Item.Meta title={item.title} description={item.description} />
-                      </List.Item>
-                    )}
-                  />
-                ) : null} */}
-                  </div>
-                </Menu.ItemGroup>
-              ) : null}
             </Menu>
           </Sider>
           <Layout style={{ backgroundColor: "#FBFBFD" }}>

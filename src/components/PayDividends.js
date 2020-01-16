@@ -30,6 +30,7 @@ import debounce from "../utils/debounce";
 import withSLP from "../utils/withSLP";
 import Text from "antd/lib/typography/Text";
 import { getBCHBalanceFromUTXO } from "../utils/sendBch";
+import { payInvoice } from "bitcoin-wallet-api";
 
 const InputGroup = Input.Group;
 const { Meta } = Card;
@@ -64,53 +65,44 @@ const StyledStat = styled.div`
   }
 `;
 
-const PayDividends = ({ SLP, token, onClose }) => {
-  const ContextValue = React.useContext(WalletContext);
-  const { wallet, tokens, balances } = ContextValue;
+const PayDividends = () => {
   const [formData, setFormData] = useState({
     dirty: true,
     value: "",
-    tokenId: token.tokenId
+    tokenId: ""
   });
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState({ tokens: 0, holders: 0, eligibles: 0, txFee: 0 });
 
-  const balanceUTXO = balances.balanceUTXO;
-
-  const submitEnabled =
-    formData.tokenId &&
-    formData.value &&
-    Number(formData.value) > DUST &&
-    (balanceUTXO - Number(formData.value) - Number(stats.txFee)).toFixed(8) >= 0;
+  const submitEnabled = formData.tokenId && formData.value && Number(formData.value) > DUST;
   useEffect(() => {
-    setLoading(true);
-    getBalancesForToken(token.tokenId)
-      .then(balancesForToken => {
-        setStats({
-          ...stats,
-          tokens: balancesForToken.totalBalance,
-          holders: balancesForToken.length ? balancesForToken.length - 1 : 0,
-          balances: balancesForToken,
-          txFee: 0
-        });
-      })
-      .finally(() => setLoading(false));
+    // setLoading(true);
+    // getBalancesForToken(token.tokenId)
+    //   .then(balancesForToken => {
+    //     setStats({
+    //       ...stats,
+    //       tokens: balancesForToken.totalBalance,
+    //       holders: balancesForToken.length ? balancesForToken.length - 1 : 0,
+    //       balances: balancesForToken,
+    //       txFee: 0
+    //     });
+    //   })
+    //   .finally(() => setLoading(false));
   }, []);
 
   const calcElegibles = useCallback(
     debounce(value => {
       if (stats.balances && value && !Number.isNaN(value)) {
         setLoading(true);
-        getElegibleAddresses(wallet, stats.balances, value)
-          .then(({ addresses, txFee }) => {
-            setStats({ ...stats, eligibles: addresses.length, txFee });
-          })
-          .finally(() => setLoading(false));
+        getElegibleAddresses(stats.balances, value).then(({ addresses }) => {
+          setStats({ ...stats, eligibles: addresses.length });
+          setLoading(false);
+        });
       } else {
         setStats({ ...stats, eligibles: 0, txFee: 0 });
       }
     }),
-    [wallet, stats]
+    [stats]
   );
 
   async function submit() {
@@ -125,36 +117,30 @@ const PayDividends = ({ SLP, token, onClose }) => {
 
     setLoading(true);
     const { value, tokenId } = formData;
+    const { eligibles } = stats;
     try {
-      const link = await sendDividends(wallet, {
+      const url = await sendDividends({
         value,
-        tokenId: token.tokenId
+        tokenId,
+        memo: `Bitcoincom Mint ${value}BCH in dividends to ${eligibles} addresses holding the tokenId ${tokenId}`
       });
 
-      if (!link) {
-        setLoading(false);
-
-        return notification.info({
-          message: "Info",
-          description: (
-            <Paragraph>No token holder with sufficient balance to receive dividends.</Paragraph>
-          ),
-          duration: 0
-        });
+      if (!url) {
+        throw "Unknown error";
       }
 
+      const paymentMemo = await payInvoice({ url }).then(({ memo }) => memo);
       notification.success({
         message: "Success",
         description: (
-          <a href={link} target="_blank">
-            <Paragraph>Transaction successful. Click or tap here for more details</Paragraph>
+          <a href={url} target="_blank">
+            <Paragraph>{paymentMemo}</Paragraph>
           </a>
         ),
         duration: 0
       });
 
       setLoading(false);
-      onClose();
     } catch (e) {
       let message;
 
@@ -190,22 +176,23 @@ const PayDividends = ({ SLP, token, onClose }) => {
     }
   };
 
-  const onMaxDividend = async () => {
+  const handleTokenIdChange = e => {
+    const { value, name } = e.target;
+    setFormData(p => ({ ...p, [name]: value }));
     setLoading(true);
-
-    try {
-      const bal = await getBCHBalanceFromUTXO(wallet);
-      // const { addresses, txFee } = await getElegibleAddresses(wallet, stats.balances, balanceUTXO);
-      // const value = (balanceUTXO - txFee - DUST).toFixed(8);
-      const { txFee } = await getElegibleAddresses(wallet, stats.balances, bal);
-      let value = bal - txFee - DUST >= 0 ? (bal - txFee - DUST).toFixed(8) : 0;
-      setFormData({
-        ...formData,
-        value: value
-      });
-      await calcElegibles(value);
-      setLoading(false);
-    } catch (err) {}
+    getBalancesForToken(value)
+      .then(balancesForToken => {
+        setLoading(false);
+        setStats({
+          ...stats,
+          tokens: balancesForToken.totalBalance,
+          holders: balancesForToken.length ? balancesForToken.length - 1 : 0,
+          balances: balancesForToken,
+          txFee: 0
+        });
+      })
+      .catch(err => {})
+      .finally(() => setLoading(false));
   };
 
   return (
@@ -221,149 +208,99 @@ const PayDividends = ({ SLP, token, onClose }) => {
               }
               bordered={false}
             >
-              {!isPiticoTokenHolder(tokens) ? (
-                <Alert
-                  message={
-                    <span>
-                      <Paragraph>
-                        <Icon type="warning" /> EXPERIMENTAL
-                      </Paragraph>
-                      <Paragraph>
-                        This is an experimental feature, available only to Pitico Cash token
-                        holders.
-                      </Paragraph>
-                      <Paragraph>
-                        <a href="https://t.me/piticocash" target="_blank">
-                          Join our Telegram Group to get your $PTCH.
-                        </a>
-                      </Paragraph>
-                    </span>
-                  }
-                  type="warning"
-                  closable={false}
-                />
-              ) : null}
               <br />
-              {isPiticoTokenHolder(tokens) ? (
-                <>
-                  <Row type="flex">
-                    <Col>
-                      <Tooltip title="Circulating Supply">
-                        <StyledStat>
-                          <Icon type="gold" />
-                          &nbsp;
-                          <Badge
-                            count={new Intl.NumberFormat("en-US").format(stats.tokens)}
-                            overflowCount={Number.MAX_VALUE}
-                            showZero
-                          />
-                          <Paragraph>Tokens</Paragraph>
-                        </StyledStat>
-                      </Tooltip>
-                    </Col>
-                    &nbsp; &nbsp; &nbsp;
-                    <Col>
-                      <Tooltip title="Addresses with at least one token">
-                        <StyledStat>
-                          <Icon type="team" />
-                          &nbsp;
-                          <Badge
-                            count={new Intl.NumberFormat("en-US").format(stats.holders)}
-                            overflowCount={Number.MAX_VALUE}
-                            showZero
-                          />
-                          <Paragraph>Holders</Paragraph>
-                        </StyledStat>
-                      </Tooltip>
-                    </Col>
-                    &nbsp; &nbsp; &nbsp;
-                    <Col>
-                      <Tooltip title="Addresses elegible to receive dividends for the specified value">
-                        <StyledStat>
-                          <Icon type="usergroup-add" />
-                          &nbsp;
-                          <Badge
-                            count={new Intl.NumberFormat("en-US").format(stats.eligibles)}
-                            overflowCount={Number.MAX_VALUE}
-                            showZero
-                          />
-                          <Paragraph>Eligibles</Paragraph>
-                        </StyledStat>
-                      </Tooltip>
-                    </Col>
-                  </Row>
-                  <Row type="flex">
-                    <Col span={24}>
-                      <Form style={{ width: "auto", marginBottom: "1em" }} noValidate>
-                        <Form.Item
-                          style={{ margin: 0 }}
-                          validateStatus={
-                            !formData.dirty && Number(formData.value) <= 0 ? "error" : ""
-                          }
-                          help={
-                            !formData.dirty && Number(formData.value) < DUST
-                              ? "BCH dividend must be greater than 0.00005 BCH"
-                              : ""
-                          }
-                        >
-                          <Input
-                            prefix={<Icon type="dollar" />}
-                            step="0.00000001"
-                            suffix="BCH"
-                            placeholder="e.g: 0.01"
-                            name="value"
-                            onChange={e => handleChange(e)}
-                            required
-                            value={formData.value}
-                            addonAfter={
-                              <Button onClick={onMaxDividend}>
-                                <Icon type="dollar" />
-                                max
-                              </Button>
-                            }
-                          />
-                        </Form.Item>
-                      </Form>
-                    </Col>
-                    <Col>
-                      <Tooltip title="Bitcoincash balance">
-                        <StyledStat>
-                          <Icon type="dollar" />
-                          &nbsp;
-                          <Badge
-                            count={balanceUTXO.toFixed(8) || "0"}
-                            overflowCount={Number.MAX_VALUE}
-                            showZero
-                          />
-                          <Paragraph>Balance</Paragraph>
-                        </StyledStat>
-                      </Tooltip>
-                    </Col>
-                    &nbsp; &nbsp; &nbsp;
-                    <Col>
-                      <Tooltip title="Transaction fee">
-                        <StyledStat>
-                          <Icon type="minus-circle" />
-                          &nbsp;
-                          <Badge
-                            count={stats.txFee || "0"}
-                            overflowCount={Number.MAX_VALUE}
-                            showZero
-                          />
-                          <Paragraph>Fee</Paragraph>
-                        </StyledStat>
-                      </Tooltip>
-                    </Col>
-                    <br />
-                    <br />
-                    <Col span={24}>
-                      <Button disabled={!submitEnabled} onClick={() => submit()}>
-                        Pay Dividends
-                      </Button>
-                    </Col>
-                  </Row>
-                </>
-              ) : null}
+              <>
+                <Row type="flex">
+                  <Col>
+                    <Tooltip title="Circulating Supply">
+                      <StyledStat>
+                        <Icon type="gold" />
+                        &nbsp;
+                        <Badge
+                          count={new Intl.NumberFormat("en-US").format(stats.tokens)}
+                          overflowCount={Number.MAX_VALUE}
+                          showZero
+                        />
+                        <Paragraph>Tokens</Paragraph>
+                      </StyledStat>
+                    </Tooltip>
+                  </Col>
+                  &nbsp; &nbsp; &nbsp;
+                  <Col>
+                    <Tooltip title="Addresses with at least one token">
+                      <StyledStat>
+                        <Icon type="team" />
+                        &nbsp;
+                        <Badge
+                          count={new Intl.NumberFormat("en-US").format(stats.holders)}
+                          overflowCount={Number.MAX_VALUE}
+                          showZero
+                        />
+                        <Paragraph>Holders</Paragraph>
+                      </StyledStat>
+                    </Tooltip>
+                  </Col>
+                  &nbsp; &nbsp; &nbsp;
+                  <Col>
+                    <Tooltip title="Addresses elegible to receive dividends for the specified value">
+                      <StyledStat>
+                        <Icon type="usergroup-add" />
+                        &nbsp;
+                        <Badge
+                          count={new Intl.NumberFormat("en-US").format(stats.eligibles)}
+                          overflowCount={Number.MAX_VALUE}
+                          showZero
+                        />
+                        <Paragraph>Eligibles</Paragraph>
+                      </StyledStat>
+                    </Tooltip>
+                  </Col>
+                </Row>
+                <Row type="flex">
+                  <Col span={24}>
+                    <Form style={{ width: "auto", marginBottom: "1em" }} noValidate>
+                      <Form.Item style={{ margin: 0 }}>
+                        <Input
+                          placeholder="token id (txid of token genesis transaction)"
+                          name="tokenId"
+                          onChange={e => handleTokenIdChange(e)}
+                          required
+                          value={formData.tokenId}
+                        />
+                      </Form.Item>
+                      <br />
+                      <Form.Item
+                        style={{ margin: 0 }}
+                        validateStatus={
+                          !formData.dirty && Number(formData.value) <= 0 ? "error" : ""
+                        }
+                        help={
+                          !formData.dirty && Number(formData.value) < DUST
+                            ? "BCH dividend must be greater than 0.00005 BCH"
+                            : ""
+                        }
+                      >
+                        <Input
+                          prefix={<Icon type="dollar" />}
+                          step="0.00000001"
+                          suffix="BCH"
+                          placeholder="e.g: 0.01"
+                          name="value"
+                          onChange={e => handleChange(e)}
+                          required
+                          value={formData.value}
+                        />
+                      </Form.Item>
+                    </Form>
+                  </Col>
+                  <br />
+                  <Col span={24}>
+                    <Button disabled={!submitEnabled} onClick={() => submit()}>
+                      Pay Dividends
+                    </Button>
+                  </Col>
+                </Row>
+              </>
             </Card>
           </Spin>
         </Col>
