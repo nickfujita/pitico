@@ -6,8 +6,9 @@ import { ButtonQR } from "badger-components-react";
 import { CopyToClipboard } from "react-copy-to-clipboard";
 import { WalletContext } from "../utils/context";
 import { Input, Button, notification, Spin, Icon, Row, Col, Card, Form, Typography } from "antd";
-import createToken from "../utils/broadcastTransaction";
+// import createToken from "../utils/broadcastTransaction";
 import { QRCode } from "./QRCode";
+import { getAddress, createToken } from "bitcoin-wallet-api";
 
 const { Paragraph, Text } = Typography;
 
@@ -21,68 +22,69 @@ const Create = ({ history }) => {
     tokenSymbol: "",
     documentHash: "",
     documentUri: "",
-    amount: ""
+    amount: "",
+    decimals: "",
+    hasMintBaton: false
   });
 
   function handleCreateToken() {
-    // setData({
-    //   ...data,
-    //   dirty: false
-    // });
+    setData({
+      ...data,
+      dirty: false
+    });
 
-    // if (!data.tokenName || !data.tokenSymbol || !data.amount || Number(data.amount) <= 0) {
-    //   return;
-    // }
+    if (!data.tokenName || !data.tokenSymbol || !data.amount || Number(data.amount) <= 0) {
+      return;
+    }
 
-    // setLoading(true);
-    alert("coming soon...");
-    // const { tokenName, tokenSymbol, documentHash, documentUri, amount } = data;
-    // try {
-    //   const docUri = documentUri || "pitico.cash";
-    //   const link = createToken(wallet, {
-    //     name: tokenName,
-    //     symbol: tokenSymbol,
-    //     documentHash,
-    //     docUri,
-    //     initialTokenQty: amount
-    //   });
+    setLoading(true);
+    const {
+      tokenName,
+      tokenSymbol,
+      documentHash,
+      documentUri,
+      amount,
+      decimals,
+      hasMintBaton
+    } = data;
 
-    //   notification.success({
-    //     message: "Success",
-    //     description: (
-    //       <a href={link} target="_blank">
-    //         <Paragraph>Transaction successful. Click or tap here for more details</Paragraph>
-    //       </a>
-    //     ),
-    //     duration: 0
-    //   });
-    // } catch (e) {
-    //   let message;
-    //   switch (e.message) {
-    //     case "Transaction has no inputs":
-    //       message = "Insufficient balance";
-    //       break;
-    //     case "Document hash must be provided as a 64 character hex string":
-    //       message = e.message;
-    //       break;
-    //     default:
-    //       message = "Unknown Error, try again later";
-    //       break;
-    //   }
-
-    //   notification.error({
-    //     message: "Error",
-    //     description: message
-    //   });
-    // } finally {
-    //   setLoading(false);
-    // }
+    getAddress({ protocol: "SLP" })
+      .then(({ address }) => {
+        return createToken({
+          name: tokenName,
+          symbol: tokenSymbol,
+          documentHash,
+          documentUri: documentUri || "pitico.cash",
+          initialSupply: amount,
+          tokenReceiverAddress: address,
+          decimals,
+          batonReceiverAddress: hasMintBaton && address
+        });
+      })
+      .then(({ tokenId }) => {
+        notification.success({
+          message: "Success",
+          description: (
+            <a href={`https://explorer.bitcoin.com/bch/tx/${tokenId}`} target="_blank">
+              <Paragraph>Transaction successful. Click or tap here for more details</Paragraph>
+            </a>
+          ),
+          duration: 0
+        });
+        setLoading(false);
+      })
+      .catch(err => {
+        notification.error({
+          message: `Error: ${err}`
+        });
+        setLoading(false);
+      });
   }
 
   const handleChange = e => {
-    const { value, name } = e.target;
+    const { value, name, checked, type } = e.target;
 
-    setData(p => ({ ...p, [name]: value }));
+    setData(p => ({ ...p, [name]: type === "checkbox" ? checked : value }));
   };
   return (
     <Row justify="center" type="flex">
@@ -156,6 +158,40 @@ const Create = ({ history }) => {
                   required
                   type="number"
                 />
+              </Form.Item>
+              <Form.Item
+                validateStatus={!data.dirty && Number(data.amount) <= 0 ? "error" : ""}
+                help={
+                  !data.dirty && Number(data.amount) < 0
+                    ? "Should be greater than or equal to 0"
+                    : ""
+                }
+              >
+                <Input
+                  style={{ padding: "0px 20px" }}
+                  placeholder="number of decimal places"
+                  name="decimals"
+                  onChange={e => handleChange(e)}
+                  required
+                  type="number"
+                />
+              </Form.Item>
+              <Form.Item
+                validateStatus={!data.dirty && Number(data.amount) <= 0 ? "error" : ""}
+                help={
+                  !data.dirty && Number(data.amount) < 0
+                    ? "Should be greater than or equal to 0"
+                    : ""
+                }
+              >
+                <Input
+                  style={{ padding: "0px 20px" }}
+                  name="hasMintBaton"
+                  onChange={e => handleChange(e)}
+                  required
+                  type="checkbox"
+                />
+                <span style={{ marginLeft: "16px" }}>Create mint baton</span>
               </Form.Item>
               <div style={{ paddingTop: "12px" }}>
                 <Button onClick={() => handleCreateToken()}>Create Token</Button>

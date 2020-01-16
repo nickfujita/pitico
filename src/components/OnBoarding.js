@@ -40,7 +40,6 @@ export const OnBoarding = ({ history }) => {
       });
   };
 
-  console.log("nicktest", selection, slpAddress, cashAddress, error);
   const displayAddress = selection === SLP ? slpAddress : cashAddress;
 
   return (
