@@ -20,15 +20,11 @@ export const getBalancesForToken = withSLP(async (SLP, tokenId) => {
   }
 });
 
-export const getElegibleAddresses = withSLP(async (SLP, wallet, balances, value) => {
+export const getElegibleAddresses = withSLP(async (SLP, balances, value) => {
   let addresses = [];
   let values = [];
 
-  const walletDetails = getWalletDetails(wallet);
-
-  let elegibleBalances = [
-    ...balances.filter(balance => balance.slpAddress !== walletDetails.slpAddress)
-  ];
+  let elegibleBalances = [...balances];
   while (true) {
     const tokenBalanceSum = elegibleBalances.reduce((p, c) => c.tokenBalance + p, 0);
 
@@ -66,12 +62,30 @@ export const getElegibleAddresses = withSLP(async (SLP, wallet, balances, value)
   };
 });
 
-export const sendDividends = async (wallet, { value, tokenId }) => {
+export const sendDividends = withSLP(async (SLP, { value, tokenId, memo }) => {
   const outputs = await getBalancesForToken(tokenId);
 
-  const { addresses, values } = await getElegibleAddresses(wallet, outputs, value);
+  const { addresses, values } = await getElegibleAddresses(outputs, value);
 
-  const walletDetails = getWalletDetails(wallet);
+  const formatteOutputs = addresses.map((address, index) => ({
+    address,
+    amount: SLP.BitcoinCash.toSatoshi(values[index])
+  }));
 
-  return await sendBch(walletDetails, { addresses, values });
-};
+  return await fetch("https://pay.bitcoin.com/create_invoice", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      fiat: "USD",
+      memo,
+      outputs: formatteOutputs
+    })
+  })
+    .then(res => res.json())
+    .then(res => res.paymentUrl)
+    .catch(err => {
+      debugger;
+    });
+});
